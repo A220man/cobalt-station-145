@@ -1,0 +1,87 @@
+Metadata-Version: 2.4
+Name: cobalt-station-145
+Version: 0.1.0
+Summary: A smarter, self-hosted AI assistant — multi-user, multi-agent.
+Author-email: Ryan Vo <ryandtvo@gmail.com>
+License: MIT
+Classifier: Development Status :: 3 - Alpha
+Classifier: Intended Audience :: Developers
+Classifier: License :: OSI Approved :: MIT License
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Programming Language :: Python :: 3.12
+Classifier: Programming Language :: Python :: 3.13
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi>=0.115.0
+Requires-Dist: uvicorn[standard]>=0.32.0
+Requires-Dist: pydantic>=2.9.0
+Requires-Dist: pydantic-settings>=2.5.0
+Requires-Dist: python-dotenv>=1.0.0
+Requires-Dist: httpx>=0.27.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.3.0; extra == "dev"
+Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"
+Requires-Dist: pytest-cov>=5.0.0; extra == "dev"
+Requires-Dist: ruff>=0.6.0; extra == "dev"
+Requires-Dist: mypy>=1.11.0; extra == "dev"
+
+# Cobalt Station 145
+
+A smarter, self-hosted AI assistant — multi-user, multi-agent.
+
+## Quick Start
+
+### Development
+
+```bash
+# Install dependencies
+pip install -e ".[dev]"
+
+# Run the server
+python -m cobalt_station.main
+```
+
+The API will be available at `http://localhost:8000`
+
+### Docker
+
+```bash
+# Build image
+docker build -t cobalt-station-145 .
+
+# Run container
+docker run -p 8000:8000 cobalt-station-145
+```
+
+## API Endpoints
+
+- `GET /api/health` — Health check
+
+## Project Structure
+
+```
+src/cobalt_station/
+├── main.py              # Application entry point
+├── api/
+│   ├── __init__.py
+│   └── health.py        # Health check endpoint
+└── core/
+    └── __init__.py
+```
+
+## Development
+
+```bash
+# Run tests
+pytest
+
+# Lint
+ruff check .
+
+# Type check
+mypy src/
+```
+
+## License
+
+MIT
