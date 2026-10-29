@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "current_feature": "core-api-skeleton",
+  "features": [
+    {
+      "id": "core-api-skeleton",
+      "title": "Core FastAPI Skeleton with Health Check",
+      "status": "done",
+      "acceptance": [
+        "FastAPI app starts on port 8000",
+        "GET /api/health returns 200 with status info",
+        "Basic project structure with pyproject.toml",
+        "Dockerfile for containerization"
+      ],
+      "implementation": [
+        "pyproject.toml",
+        "src/cobalt_station/main.py",
+        "src/cobalt_station/api/health.py",
+        "Dockerfile",
+        "README.md"
+      ],
+      "tests": [
+        "tests/test_health.py"
+      ]
+    },
+    {
+      "id": "agent-workspace-isolation",
+      "title": "Agent Workspace File Isolation (Issue #1160)",
+      "status": "planned",
+      "acceptance": [
+        "Each agent has dedicated workspace under ./workspaces/{agent_id}/",
+        "File operations (read/write/create) restricted to agent's workspace",
+        "Cross-agent workspace access returns permission error",
+        "Path traversal attempts blocked"
+      ],
+      "implementation": [
+        "src/cobalt_station/api/agents.py",
+        "src/cobalt_station/core/workspace.py",
+        "src/cobalt_station/tools/file_ops.py"
+      ],
+      "tests": [
+        "tests/test_workspace_isolation.py"
+      ]
+    },
+    {
+      "id": "multi-user-auth",
+      "title": "Multi-user Authentication & Authorization",
+      "status": "planned",
+      "acceptance": [
+        "User registration and login endpoints",
+        "JWT token-based authentication",
+        "Role-based access control (admin, user)",
+        "User data isolation"
+      ],
+      "implementation": [
+        "src/cobalt_station/api/auth.py",
+        "src/cobalt_station/core/auth.py",
+        "src/cobalt_station/models/user.py"
+      ],
+      "tests": [
+        "tests/test_auth.py"
+      ]
+    },
+    {
+      "id": "mcp-server",
+      "title": "MCP Server for External AI Access (Issue #322)",
+      "status": "planned",
+      "acceptance": [
+        "MCP server exposes tools/resources to external AI clients",
+        "Standard MCP protocol compliance",
+        "Tool registration and invocation"
+      ],
+      "implementation": [
+        "src/cobalt_station/mcp/server.py",
+        "src/cobalt_station/mcp/tools.py"
+      ],
+      "tests": [
+        "tests/test_mcp.py"
+      ]
+    },
+    {
+      "id": "shared-specialist-agents",
+      "title": "Shared Specialist Agents for Users (Issue #2207)",
+      "status": "planned",
+      "acceptance": [
+        "Admins can configure shared specialist agents",
+        "Regular users access pre-configured specialists without setup",
+        "User data/workspace isolation maintained"
+      ],
+      "implementation": [
+        "src/cobalt_station/api/specialists.py",
+        "src/cobalt_station/core/specialist.py"
+      ],
+      "tests": [
+        "tests/test_specialists.py"
+      ]
+    }
+  ]
+}
