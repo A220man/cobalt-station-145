@@ -1,0 +1,175 @@
+"""File operations with workspace isolation."""
+from pathlib import Path
+from typing import BinaryIO
+
+from cobalt_station.core.workspace import (
+    PathTraversalError,
+    WorkspacePermissionError,
+    get_agent_workspace,
+    validate_path_within_workspace,
+)
+
+
+class FileOperationError(Exception):
+    """Raised when a file operation fails."""
+
+    pass
+
+
+def read_file(agent_id: str, path: str | Path) -> str:
+    """Read a file within the agent's workspace.
+
+    Args:
+        agent_id: The agent's unique identifier.
+        path: Path to the file (relative to workspace or absolute).
+
+    Returns:
+        File contents as string.
+
+    Raises:
+        FileOperationError: If the file cannot be read or access is denied.
+    """
+    try:
+        resolved_path = validate_path_within_workspace(agent_id, path)
+    except (WorkspacePermissionError, PathTraversalError) as e:
+        raise FileOperationError(str(e)) from e
+
+    if not resolved_path.exists():
+        raise FileOperationError(f"File not found: {path}")
+
+    if not resolved_path.is_file():
+        raise FileOperationError(f"Not a file: {path}")
+
+    return resolved_path.read_text(encoding="utf-8")
+
+
+def write_file(agent_id: str, path: str | Path, content: str) -> int:
+    """Write a file within the agent's workspace.
+
+    Args:
+        agent_id: The agent's unique identifier.
+        path: Path to the file (relative to workspace or absolute).
+        content: Content to write.
+
+    Returns:
+        Number of bytes written.
+
+    Raises:
+        FileOperationError: If the file cannot be written or access is denied.
+    """
+    try:
+        resolved_path = validate_path_within_workspace(agent_id, path)
+    except (WorkspacePermissionError, PathTraversalError) as e:
+        raise FileOperationError(str(e)) from e
+
+    # Create parent directories if they don't exist
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+
+    bytes_written = resolved_path.write_text(content, encoding="utf-8")
+    return bytes_written
+
+
+def create_file(agent_id: str, path: str | Path, content: str = "") -> int:
+    """Create a new file within the agent's workspace.
+
+    Args:
+        agent_id: The agent's unique identifier.
+        path: Path to the file (relative to workspace or absolute).
+        content: Initial content (default empty).
+
+    Returns:
+        Number of bytes written.
+
+    Raises:
+        FileOperationError: If the file already exists or access is denied.
+    """
+    try:
+        resolved_path = validate_path_within_workspace(agent_id, path)
+    except (WorkspacePermissionError, PathTraversalError) as e:
+        raise FileOperationError(str(e)) from e
+
+    if resolved_path.exists():
+        raise FileOperationError(f"File already exists: {path}")
+
+    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    bytes_written = resolved_path.write_text(content, encoding="utf-8")
+    return bytes_written
+
+
+def delete_file(agent_id: str, path: str | Path) -> None:
+    """Delete a file within the agent's workspace.
+
+    Args:
+        agent_id: The agent's unique identifier.
+        path: Path to the file (relative to workspace or absolute).
+
+    Raises:
+        FileOperationError: If the file cannot be deleted or access is denied.
+    """
+    try:
+        resolved_path = validate_path_within_workspace(agent_id, path)
+    except (WorkspacePermissionError, PathTraversalError) as e:
+        raise FileOperationError(str(e)) from e
+
+    if not resolved_path.exists():
+        raise FileOperationError(f"File not found: {path}")
+
+    if not resolved_path.is_file():
+        raise FileOperationError(f"Not a file: {path}")
+
+    resolved_path.unlink()
+
+
+def list_files(agent_id: str, path: str | Path = ".") -> list[str]:
+    """List files in a directory within the agent's workspace.
+
+    Args:
+        agent_id: The agent's unique identifier.
+        path: Directory path (relative to workspace or absolute, default ".").
+
+    Returns:
+        List of file/directory names.
+
+    Raises:
+        FileOperationError: If the directory cannot be listed or access is denied.
+    """
+    try:
+        resolved_path = validate_path_within_workspace(agent_id, path)
+    except (WorkspacePermissionError, PathTraversalError) as e:
+        raise FileOperationError(str(e)) from e
+
+    if not resolved_path.exists():
+        raise FileOperationError(f"Directory not found: {path}")
+
+    if not resolved_path.is_dir():
+        raise FileOperationError(f"Not a directory: {path}")
+
+    return [entry.name for entry in resolved_path.iterdir()]
+
+
+def get_file_size(agent_id: str, path: str | Path) -> int:
+    """Get the size of a file within the agent's workspace.
+
+    Args:
+        agent_id: The agent's unique identifier.
+        path: Path to the file (relative to workspace or absolute).
+
+    Returns:
+        File size in bytes.
+
+    Raises:
+        FileOperationError: If the file cannot be accessed or access is denied.
+    """
+    try:
+        resolved_path = validate_path_within_workspace(agent_id, path)
+    except (WorkspacePermissionError, PathTraversalError) as e:
+        raise FileOperationError(str(e)) from e
+
+    if not resolved_path.exists():
+        raise FileOperationError(f"File not found: {path}")
+
+    if not resolved_path.is_file():
+        raise FileOperationError(f"Not a file: {path}")
+
+    return resolved_path.stat().st_size
+
