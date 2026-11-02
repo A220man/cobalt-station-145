@@ -1,0 +1,208 @@
+"""Agent management API endpoints."""
+from fastapi import APIRouter, HTTPException, status
+from pydantic import BaseModel, Field
+
+from cobalt_station.core.workspace import (
+    PathTraversalError,
+    WorkspaceError,
+    WorkspaceNotFoundError,
+    WorkspacePermissionError,
+    ensure_workspace_exists,
+    list_agent_workspaces,
+)
+from cobalt_station.tools.file_ops import (
+    FileOperationError,
+    create_file,
+    delete_file,
+    get_file_size,
+    list_files,
+    read_file,
+    write_file,
+)
+
+router = APIRouter(prefix="/api/agents", tags=["agents"])
+
+
+class AgentCreate(BaseModel):
+    """Request model for creating an agent."""
+
+    agent_id: str = Field(..., min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
+    name: str | None = None
+    description: str | None = None
+
+
+class AgentResponse(BaseModel):
+    """Response model for an agent."""
+
+    agent_id: str
+    name: str | None = None
+    description: str | None = None
+    workspace_path: str
+
+
+class FileReadRequest(BaseModel):
+    """Request model for reading a file."""
+
+    path: str = Field(..., min_length=1)
+
+
+class FileWriteRequest(BaseModel):
+    """Request model for writing a file."""
+
+    path: str = Field(..., min_length=1)
+    content: str = ""
+
+
+class FileCreateRequest(BaseModel):
+    """Request model for creating a file."""
+
+    path: str = Field(..., min_length=1)
+    content: str = ""
+
+
+class FileDeleteRequest(BaseModel):
+    """Request model for deleting a file."""
+
+    path: str = Field(..., min_length=1)
+
+
+class FileListRequest(BaseModel):
+    """Request model for listing files."""
+
+    path: str = "."
+
+
+class FileResponse(BaseModel):
+    """Response model for file operations."""
+
+    path: str
+    content: str | None = None
+    size: int | None = None
+    files: list[str] | None = None
+
+
+@router.post("", response_model=AgentResponse, status_code=status.HTTP_201_CREATED)
+async def create_agent(agent_data: AgentCreate) -> AgentResponse:
+    """Create a new agent with its own isolated workspace."""
+    try:
+        workspace_path = ensure_workspace_exists(agent_data.agent_id)
+    except (WorkspacePermissionError, PathTraversalError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+    return AgentResponse(
+        agent_id=agent_data.agent_id,
+        name=agent_data.name,
+        description=agent_data.description,
+        workspace_path=str(workspace_path),
+    )
+
+
+@router.get("", response_model=list[AgentResponse])
+async def list_agents() -> list[AgentResponse]:
+    """List all agents with workspaces."""
+    agent_ids = list_agent_workspaces()
+    agents = []
+    for agent_id in agent_ids:
+        workspace_path = ensure_workspace_exists(agent_id)
+        agents.append(
+            AgentResponse(
+                agent_id=agent_id,
+                name=None,
+                description=None,
+                workspace_path=str(workspace_path),
+            )
+        )
+    return agents
+
+
+@router.get("/{agent_id}", response_model=AgentResponse)
+async def get_agent(agent_id: str) -> AgentResponse:
+    """Get agent details."""
+    try:
+        workspace_path = ensure_workspace_exists(agent_id)
+    except WorkspaceNotFoundError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Agent {agent_id} not found",
+        )
+
+    return AgentResponse(
+        agent_id=agent_id,
+        name=None,
+        description=None,
+        workspace_path=str(workspace_path),
+    )
+
+
+@router.post("/{agent_id}/files/read", response_model=FileResponse)
+async def read_agent_file(agent_id: str, request: FileReadRequest) -> FileResponse:
+    """Read a file from the agent's workspace."""
+    try:
+        content = read_file(agent_id, request.path)
+    except FileOperationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN if "outside" in str(e) else status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+
+    return FileResponse(path=request.path, content=content, size=len(content.encode("utf-8")))
+
+
+@router.post("/{agent_id}/files/write", response_model=FileResponse)
+async def write_agent_file(agent_id: str, request: FileWriteRequest) -> FileResponse:
+    """Write a file to the agent's workspace (creates if not exists)."""
+    try:
+        bytes_written = write_file(agent_id, request.path, request.content)
+    except FileOperationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN if "outside" in str(e) else status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        ) from e
+
+    return FileResponse(path=request.path, content=request.content, size=bytes_written)
+
+
+@router.post("/{agent_id}/files/create", response_model=FileResponse, status_code=status.HTTP_201_CREATED)
+async def create_agent_file(agent_id: str, request: FileCreateRequest) -> FileResponse:
+    """Create a new file in the agent's workspace (fails if exists)."""
+    try:
+        bytes_written = create_file(agent_id, request.path, request.content)
+    except FileOperationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN if "outside" in str(e) else status.HTTP_409_CONFLICT,
+            detail=str(e),
+        ) from e
+
+    return FileResponse(path=request.path, content=request.content, size=bytes_written)
+
+
+@router.delete("/{agent_id}/files", response_model=FileResponse)
+async def delete_agent_file(agent_id: str, request: FileDeleteRequest) -> FileResponse:
+    """Delete a file from the agent's workspace."""
+    try:
+        delete_file(agent_id, request.path)
+    except FileOperationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN if "outside" in str(e) else status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+
+    return FileResponse(path=request.path)
+
+
+@router.post("/{agent_id}/files/list", response_model=FileResponse)
+async def list_agent_files(agent_id: str, request: FileListRequest) -> FileResponse:
+    """List files in a directory within the agent's workspace."""
+    try:
+        files = list_files(agent_id, request.path)
+    except FileOperationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN if "outside" in str(e) else status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        ) from e
+
+    return FileResponse(path=request.path, files=files)
+

@@ -1,0 +1,334 @@
+"""Tests for agent workspace isolation."""
+import pytest
+import tempfile
+import os
+from pathlib import Path
+from httpx import ASGITransport, AsyncClient
+
+from cobalt_station.main import create_app
+from cobalt_station.core.workspace import (
+    WorkspacePermissionError,
+    PathTraversalError,
+    get_agent_workspace,
+    validate_path_within_workspace,
+    ensure_workspace_exists,
+)
+from cobalt_station.tools.file_ops import (
+    FileOperationError,
+    read_file,
+    write_file,
+    create_file,
+    delete_file,
+    list_files,
+    get_file_size,
+)
+
+
+@pytest.fixture
+async def client():
+    """Create test client."""
+    app = create_app()
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac
+
+
+@pytest.fixture(autouse=True)
+def setup_workspaces():
+    """Set up temporary workspaces for testing."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        original_cwd = os.getcwd()
+        os.chdir(tmpdir)
+        yield
+        os.chdir(original_cwd)
+
+
+class TestWorkspaceCore:
+    """Tests for core workspace functionality."""
+
+    def test_get_agent_workspace_creates_directory(self):
+        """Test that get_agent_workspace creates the workspace directory."""
+        workspace = get_agent_workspace("agent_a")
+        assert workspace.exists()
+        assert workspace.is_dir()
+        assert workspace.name == "agent_a"
+
+    def test_agent_workspace_isolation(self):
+        """Test that agents have separate workspaces."""
+        workspace_a = get_agent_workspace("agent_a")
+        workspace_b = get_agent_workspace("agent_b")
+        assert workspace_a != workspace_b
+        assert "agent_a" in str(workspace_a)
+        assert "agent_b" in str(workspace_b)
+
+    def test_validate_path_within_workspace_allows_relative_paths(self):
+        """Test that relative paths within workspace are allowed."""
+        workspace = ensure_workspace_exists("agent_a")
+        test_file = workspace / "test.txt"
+        test_file.write_text("hello")
+
+        resolved = validate_path_within_workspace("agent_a", "test.txt")
+        assert resolved == test_file.resolve()
+
+    def test_validate_path_within_workspace_allows_subdirectories(self):
+        """Test that subdirectories within workspace are allowed."""
+        resolved = validate_path_within_workspace("agent_a", "subdir/file.txt")
+        assert "subdir" in str(resolved)
+        assert resolved.is_relative_to(get_agent_workspace("agent_a"))
+
+    def test_validate_path_within_workspace_blocks_cross_agent_access(self):
+        """Test that accessing another agent's workspace is blocked."""
+        ensure_workspace_exists("agent_a")
+        ensure_workspace_exists("agent_b")
+
+        with pytest.raises(WorkspacePermissionError):
+            validate_path_within_workspace("agent_a", "../agent_b/secret.txt")
+
+    def test_validate_path_within_workspace_blocks_path_traversal(self):
+        """Test that path traversal attempts are blocked."""
+        ensure_workspace_exists("agent_a")
+
+        with pytest.raises((WorkspacePermissionError, PathTraversalError)):
+            validate_path_within_workspace("agent_a", "../../../etc/passwd")
+
+    def test_validate_path_within_workspace_blocks_absolute_outside_paths(self):
+        """Test that absolute paths outside workspace are blocked."""
+        ensure_workspace_exists("agent_a")
+
+        with pytest.raises(WorkspacePermissionError):
+            validate_path_within_workspace("agent_a", "/etc/passwd")
+
+
+class TestFileOperations:
+    """Tests for file operations with workspace isolation."""
+
+    def test_read_write_file_within_workspace(self):
+        """Test reading and writing files within workspace."""
+        ensure_workspace_exists("agent_a")
+
+        write_file("agent_a", "test.txt", "hello world")
+        content = read_file("agent_a", "test.txt")
+        assert content == "hello world"
+
+    def test_create_file_fails_if_exists(self):
+        """Test that create_file fails if file already exists."""
+        ensure_workspace_exists("agent_a")
+        write_file("agent_a", "test.txt", "original")
+
+        with pytest.raises(FileOperationError, match="already exists"):
+            create_file("agent_a", "test.txt", "new content")
+
+    def test_delete_file(self):
+        """Test deleting a file."""
+        ensure_workspace_exists("agent_a")
+        write_file("agent_a", "test.txt", "to delete")
+
+        delete_file("agent_a", "test.txt")
+
+        with pytest.raises(FileOperationError, match="not found"):
+            read_file("agent_a", "test.txt")
+
+    def test_list_files(self):
+        """Test listing files in workspace."""
+        ensure_workspace_exists("agent_a")
+        write_file("agent_a", "file1.txt", "content1")
+        write_file("agent_a", "file2.txt", "content2")
+
+        files = list_files("agent_a")
+        assert "file1.txt" in files
+        assert "file2.txt" in files
+
+    def test_get_file_size(self):
+        """Test getting file size."""
+        ensure_workspace_exists("agent_a")
+        write_file("agent_a", "test.txt", "hello")
+
+        size = get_file_size("agent_a", "test.txt")
+        assert size == 5
+
+    def test_cross_agent_file_access_blocked(self):
+        """Test that agents cannot access each other's files."""
+        ensure_workspace_exists("agent_a")
+        ensure_workspace_exists("agent_b")
+        write_file("agent_b", "secret.txt", "agent_b secret")
+
+        with pytest.raises(FileOperationError, match="outside"):
+            read_file("agent_a", "../agent_b/secret.txt")
+
+    def test_path_traversal_blocked(self):
+        """Test that path traversal is blocked."""
+        ensure_workspace_exists("agent_a")
+
+        with pytest.raises(FileOperationError):
+            read_file("agent_a", "../../../etc/passwd")
+
+
+class TestAgentAPI:
+    """Tests for agent API endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_create_agent(self, client):
+        """Test creating an agent via API."""
+        response = await client.post(
+            "/api/agents",
+            json={"agent_id": "test_agent", "name": "Test Agent", "description": "A test agent"},
+        )
+        assert response.status_code == 201
+        data = response.json()
+        assert data["agent_id"] == "test_agent"
+        assert data["name"] == "Test Agent"
+
+    @pytest.mark.asyncio
+    async def test_create_agent_invalid_id(self, client):
+        """Test creating agent with invalid ID fails."""
+        response = await client.post(
+            "/api/agents",
+            json={"agent_id": "invalid id!", "name": "Test"},
+        )
+        assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_list_agents(self, client):
+        """Test listing agents."""
+        await client.post("/api/agents", json={"agent_id": "agent1"})
+        await client.post("/api/agents", json={"agent_id": "agent2"})
+
+        response = await client.get("/api/agents")
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data) == 2
+        agent_ids = {a["agent_id"] for a in data}
+        assert agent_ids == {"agent1", "agent2"}
+
+    @pytest.mark.asyncio
+    async def test_get_agent(self, client):
+        """Test getting agent details."""
+        await client.post("/api/agents", json={"agent_id": "agent1"})
+
+        response = await client.get("/api/agents/agent1")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["agent_id"] == "agent1"
+
+    @pytest.mark.asyncio
+    async def test_get_nonexistent_agent(self, client):
+        """Test getting nonexistent agent returns 404."""
+        response = await client.get("/api/agents/nonexistent")
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_write_and_read_file_via_api(self, client):
+        """Test writing and reading a file via API."""
+        await client.post("/api/agents", json={"agent_id": "agent1"})
+
+        # Write file
+        response = await client.post(
+            "/api/agents/agent1/files/write",
+            json={"path": "test.txt", "content": "hello from api"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["content"] == "hello from api"
+        assert data["size"] == 16
+
+        # Read file
+        response = await client.post(
+            "/api/agents/agent1/files/read",
+            json={"path": "test.txt"},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["content"] == "hello from api"
+
+    @pytest.mark.asyncio
+    async def test_create_file_via_api(self, client):
+        """Test creating a new file via API."""
+        await client.post("/api/agents", json={"agent_id": "agent1"})
+
+        response = await client.post(
+            "/api/agents/agent1/files/create",
+            json={"path": "new.txt", "content": "new file"},
+        )
+        assert response.status_code == 201
+
+        # Creating again should fail
+        response = await client.post(
+            "/api/agents/agent1/files/create",
+            json={"path": "new.txt", "content": "new file"},
+        )
+        assert response.status_code == 409
+
+    @pytest.mark.asyncio
+    async def test_delete_file_via_api(self, client):
+        """Test deleting a file via API."""
+        await client.post("/api/agents", json={"agent_id": "agent1"})
+        await client.post(
+            "/api/agents/agent1/files/write",
+            json={"path": "to_delete.txt", "content": "delete me"},
+        )
+
+        response = await client.delete(
+            "/api/agents/agent1/files",
+            json={"path": "to_delete.txt"},
+        )
+        assert response.status_code == 200
+
+        # Reading deleted file should fail
+        response = await client.post(
+            "/api/agents/agent1/files/read",
+            json={"path": "to_delete.txt"},
+        )
+        assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_list_files_via_api(self, client):
+        """Test listing files via API."""
+        await client.post("/api/agents", json={"agent_id": "agent1"})
+        await client.post(
+            "/api/agents/agent1/files/write",
+            json={"path": "file1.txt", "content": "1"},
+        )
+        await client.post(
+            "/api/agents/agent1/files/write",
+            json={"path": "file2.txt", "content": "2"},
+        )
+
+        response = await client.post(
+            "/api/agents/agent1/files/list",
+            json={"path": "."},
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "file1.txt" in data["files"]
+        assert "file2.txt" in data["files"]
+
+    @pytest.mark.asyncio
+    async def test_cross_agent_file_access_blocked_via_api(self, client):
+        """Test that cross-agent file access is blocked via API."""
+        await client.post("/api/agents", json={"agent_id": "agent_a"})
+        await client.post("/api/agents", json={"agent_id": "agent_b"})
+
+        # Agent B writes a secret file
+        await client.post(
+            "/api/agents/agent_b/files/write",
+            json={"path": "secret.txt", "content": "agent_b secret"},
+        )
+
+        # Agent A tries to read Agent B's file
+        response = await client.post(
+            "/api/agents/agent_a/files/read",
+            json={"path": "../agent_b/secret.txt"},
+        )
+        assert response.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_path_traversal_blocked_via_api(self, client):
+        """Test that path traversal is blocked via API."""
+        await client.post("/api/agents", json={"agent_id": "agent1"})
+
+        response = await client.post(
+            "/api/agents/agent1/files/read",
+            json={"path": "../../../etc/passwd"},
+        )
+        assert response.status_code == 403
+
