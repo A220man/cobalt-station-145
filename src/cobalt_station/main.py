@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from cobalt_station.api.agents import router as agents_router
 from cobalt_station.api.health import router as health_router
 
 
@@ -35,6 +36,7 @@ def create_app() -> FastAPI:
     )
 
     # Include routers
+    app.include_router(agents_router)
     app.include_router(health_router)
 
     return app

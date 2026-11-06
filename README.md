@@ -32,6 +32,14 @@ docker run -p 8000:8000 cobalt-station-145
 ## API Endpoints
 
 - `GET /api/health` — Health check
+- `POST /api/agents` — Create a new agent with workspace
+- `GET /api/agents` — List all agents
+- `GET /api/agents/{agent_id}` — Get agent workspace info
+- `GET /api/agents/{agent_id}/files` — List files in agent's workspace
+- `GET /api/agents/{agent_id}/files/read` — Read a file from agent's workspace
+- `POST /api/agents/{agent_id}/files/write` — Write a file to agent's workspace
+- `POST /api/agents/{agent_id}/files/create` — Create a new file in agent's workspace
+- `DELETE /api/agents/{agent_id}/files` — Delete a file from agent's workspace
 
 ## Project Structure
 
@@ -40,9 +48,14 @@ src/cobalt_station/
 ├── main.py              # Application entry point
 ├── api/
 │   ├── __init__.py
-│   └── health.py        # Health check endpoint
-└── core/
-    └── __init__.py
+│   ├── health.py        # Health check endpoint
+│   └── agents.py        # Agent workspace endpoints
+├── core/
+│   ├── __init__.py
+│   └── workspace.py     # Workspace isolation logic
+└── tools/
+    ├── __init__.py
+    └── file_ops.py      # File operations with isolation
 ```
 
 ## Development

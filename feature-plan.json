@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "current_feature": "core-api-skeleton",
+  "current_feature": "agent-workspace-isolation",
   "features": [
     {
       "id": "core-api-skeleton",
@@ -26,7 +26,7 @@
     {
       "id": "agent-workspace-isolation",
       "title": "Agent Workspace File Isolation (Issue #1160)",
-      "status": "planned",
+      "status": "done",
       "acceptance": [
         "Each agent has dedicated workspace under ./workspaces/{agent_id}/",
         "File operations (read/write/create) restricted to agent's workspace",

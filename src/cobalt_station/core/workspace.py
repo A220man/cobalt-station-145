@@ -1,5 +1,4 @@
 """Workspace isolation for agents."""
-import os
 from pathlib import Path
 from typing import Final
 
