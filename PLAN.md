@@ -4,7 +4,7 @@ Each round completes one feature or repair. Future items are planned, not implem
 
 ## Current round
 
-core-api-skeleton
+agent-workspace-isolation
 
 ## Roadmap
 
@@ -24,7 +24,7 @@ Tests: `tests/test_health.py`
 
 ### agent-workspace-isolation — Agent Workspace File Isolation (Issue #1160)
 
-Status: planned
+Status: done
 
 Acceptance:
 - Each agent has dedicated workspace under ./workspaces/{agent_id}/
