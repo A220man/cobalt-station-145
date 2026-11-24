@@ -23,6 +23,16 @@ from cobalt_station.tools.file_ops import (
     write_file,
 )
 
+
+
+class AgentStatsResponse(BaseModel):
+    """Agent workspace statistics."""
+    agent_id: str
+    workspace_path: str
+    file_count: int
+    directory_count: int
+    total_size_bytes: int
+    created_at: float = 0.0
 router = APIRouter(prefix="/api/agents", tags=["agents"])
 
 
@@ -199,3 +209,44 @@ async def delete_agent_file(agent_id: str, path: str) -> None:
     except (WorkspacePermissionError, PathTraversalError, FileNotFoundError, FileOperationError) as e:
         raise _map_workspace_error(e)
 
+@router.get("/{agent_id}/stats", response_model=AgentStatsResponse)
+async def get_agent_stats(agent_id: str) -> AgentStatsResponse:
+    """Get agent workspace statistics."""
+    try:
+        workspace = ensure_workspace_exists(agent_id)
+        info = get_workspace_info(agent_id)
+        # Get directory count and total size
+        from pathlib import Path
+        import os
+        workspaces_root = Path("./workspaces").resolve()
+        agent_workspace = workspaces_root / agent_id
+        
+        dir_count = 0
+        total_size = 0
+        if agent_workspace.exists():
+            for root, dirs, files in os.walk(agent_workspace):
+                dir_count += len(dirs)
+                for f in files:
+                    fp = Path(root) / f
+                    if fp.exists():
+                        total_size += fp.stat().st_size
+        
+        return AgentStatsResponse(
+            agent_id=agent_id,
+            workspace_path=str(workspace),
+            file_count=info["file_count"],
+            directory_count=dir_count,
+            total_size_bytes=total_size,
+        )
+    except (WorkspaceNotFoundError, PathTraversalError) as e:
+        raise _map_workspace_error(e)
+
+
+
+    """Agent workspace statistics."""
+    agent_id: str
+    workspace_path: str
+    file_count: int
+    directory_count: int
+    total_size_bytes: int
+    created_at: float = 0.0
