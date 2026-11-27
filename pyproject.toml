@@ -1,6 +1,6 @@
 [project]
 name = "cobalt-station-145"
-version = "1.6.0"
+version = "1.7.0"
 description = "A smarter, self-hosted AI assistant — multi-user, multi-agent."
 readme = "README.md"
 requires-python = ">=3.11"

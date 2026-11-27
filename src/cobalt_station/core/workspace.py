@@ -1,4 +1,5 @@
-"""Workspace isolation for agents."""
+"""Modified workspace functions with explicit workspace creation."""
+
 from pathlib import Path
 from typing import Final
 
@@ -38,11 +39,9 @@ def get_workspace_root() -> Path:
 def get_agent_workspace(agent_id: str) -> Path:
     """Get the workspace directory for a specific agent.
 
-    Args:
-        agent_id: The agent's unique identifier.
-
-    Returns:
-        Absolute path to the agent's workspace directory.
+    Returns the path without creating the directory.
+    The caller must ensure the workspace exists using ensure_workspace_exists()
+    or have it created previously.
     """
     workspace_root = get_workspace_root()
     agent_workspace = (workspace_root / agent_id).resolve()
@@ -53,25 +52,23 @@ def get_agent_workspace(agent_id: str) -> Path:
     except ValueError:
         raise PathTraversalError(f"Invalid agent_id: {agent_id}")
 
-    agent_workspace.mkdir(parents=True, exist_ok=True)
+    # Do NOT create the directory here - let the caller decide
     return agent_workspace
+
+
+def ensure_workspace_exists(agent_id: str) -> Path:
+    """Ensure an agent's workspace exists, creating it if necessary."""
+    workspace = get_agent_workspace(agent_id)
+    workspace.mkdir(parents=True, exist_ok=True)
+    return workspace
 
 
 def validate_path_within_workspace(agent_id: str, target_path: str | Path) -> Path:
     """Validate that a target path is within the agent's workspace.
 
-    Args:
-        agent_id: The agent's unique identifier.
-        target_path: The path to validate (relative or absolute).
-
-    Returns:
-        Resolved absolute path within the workspace.
-
-    Raises:
-        WorkspacePermissionError: If the path is outside the agent's workspace.
-        PathTraversalError: If path traversal is attempted.
+    Raises WorkspaceNotFoundError if the agent's workspace doesn't exist.
     """
-    workspace = get_agent_workspace(agent_id)
+    workspace = get_agent_workspace(agent_id)  # This now won't create the dir
 
     # Resolve the target path relative to workspace
     if isinstance(target_path, str):
@@ -91,34 +88,23 @@ def validate_path_within_workspace(agent_id: str, target_path: str | Path) -> Pa
             f"Agent {agent_id} cannot access path outside its workspace: {target_path}"
         )
 
+    # Check that the workspace exists
+    if not workspace.exists():
+        raise WorkspaceNotFoundError(
+            f"Agent workspace not found: {agent_id}. "
+            "Create the agent first using POST /api/agents"
+        )
+
     return resolved_target
 
 
-def ensure_workspace_exists(agent_id: str) -> Path:
-    """Ensure an agent's workspace exists, creating it if necessary.
-
-    Args:
-        agent_id: The agent's unique identifier.
-
-    Returns:
-        Absolute path to the agent's workspace directory.
-    """
-    return get_agent_workspace(agent_id)
-
-
 def list_agent_workspaces() -> list[str]:
-    """List all agent workspace directories.
-
-    Returns:
-        List of agent IDs that have workspaces.
-    """
+    """List all agent workspace directories."""
     workspace_root = get_workspace_root()
     if not workspace_root.exists():
         return []
-
     return [
         d.name
         for d in workspace_root.iterdir()
         if d.is_dir() and not d.name.startswith(".")
     ]
-
