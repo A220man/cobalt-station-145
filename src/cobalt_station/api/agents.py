@@ -163,6 +163,7 @@ async def get_agent(agent_id: str) -> AgentResponse:
 async def list_agent_files(agent_id: str, path: str = ".") -> FileListResponse:
     """List files in agent's workspace directory."""
     try:
+        ensure_workspace_exists(agent_id)
         items = list_files(agent_id, path)
         return FileListResponse(path=path, items=items)
     except (WorkspacePermissionError, PathTraversalError, FileNotFoundError, FileOperationError) as e:
@@ -173,6 +174,7 @@ async def list_agent_files(agent_id: str, path: str = ".") -> FileListResponse:
 async def read_agent_file(agent_id: str, path: str) -> FileReadResponse:
     """Read a file from agent's workspace."""
     try:
+        ensure_workspace_exists(agent_id)
         content = read_file(agent_id, path)
         return FileReadResponse(path=path, content=content)
     except (WorkspacePermissionError, PathTraversalError, FileNotFoundError, FileTooLargeError) as e:
@@ -183,6 +185,7 @@ async def read_agent_file(agent_id: str, path: str) -> FileReadResponse:
 async def write_agent_file(agent_id: str, request: FileWriteRequest) -> FileReadResponse:
     """Write a file to agent's workspace (create or overwrite)."""
     try:
+        ensure_workspace_exists(agent_id)
         write_file(agent_id, request.path, request.content)
         content = read_file(agent_id, request.path)
         return FileReadResponse(path=request.path, content=content)
@@ -194,6 +197,7 @@ async def write_agent_file(agent_id: str, request: FileWriteRequest) -> FileRead
 async def create_agent_file(agent_id: str, request: FileCreateRequest) -> FileReadResponse:
     """Create a new file in agent's workspace."""
     try:
+        ensure_workspace_exists(agent_id)
         create_file(agent_id, request.path, request.content)
         content = read_file(agent_id, request.path)
         return FileReadResponse(path=request.path, content=content)
@@ -205,6 +209,7 @@ async def create_agent_file(agent_id: str, request: FileCreateRequest) -> FileRe
 async def delete_agent_file(agent_id: str, path: str) -> None:
     """Delete a file from agent's workspace."""
     try:
+        ensure_workspace_exists(agent_id)
         delete_file(agent_id, path)
     except (WorkspacePermissionError, PathTraversalError, FileNotFoundError, FileOperationError) as e:
         raise _map_workspace_error(e)

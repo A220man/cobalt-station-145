@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: cobalt-station-145
-Version: 1.5.0
+Version: 1.6.0
 Summary: A smarter, self-hosted AI assistant — multi-user, multi-agent.
 Author-email: Ryan Vo <ryandtvo@gmail.com>
 License: MIT
@@ -29,7 +29,7 @@ Requires-Dist: mypy>=1.11.0; extra == "dev"
 
 # Cobalt Station 145 — Ryan Vo
 
-Current version: `1.5.0`.
+Current version: `1.6.0`.
 
 > Work in progress. This checkpoint may be incomplete or fail tests. See PLAN.md and STATUS.md before use.
 
